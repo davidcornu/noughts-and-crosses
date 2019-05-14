@@ -63,17 +63,18 @@ struct Cell {
     winning: bool,
 }
 
-const BOARD_SIZE: usize = 3;
-
 #[derive(Debug)]
 struct Board {
-    cells: [[Cell; BOARD_SIZE]; BOARD_SIZE],
+    size: usize,
+    cells: Vec<Vec<Cell>>,
 }
 
 impl Default for Board {
     fn default() -> Self {
+        let size = 3;
         Board {
-            cells: [[Cell::default(); BOARD_SIZE]; BOARD_SIZE],
+            size,
+            cells: vec![vec![Cell::default(); size]; size],
         }
     }
 }
@@ -88,26 +89,26 @@ impl Board {
     }
 }
 
-type WinCoords = [Coord; BOARD_SIZE];
+type WinCoords = Vec<Coord>;
 
 impl Board {
-    fn generate_diagonal_coords() -> [WinCoords; 2] {
-        let mut top_left_to_bottom_right = [Coord::default(); BOARD_SIZE];
-        let mut top_right_to_bottom_left = [Coord::default(); BOARD_SIZE];
+    fn generate_diagonal_coords(&self) -> Vec<WinCoords> {
+        let mut top_left_to_bottom_right = vec![Coord::default(); self.size];
+        let mut top_right_to_bottom_left = vec![Coord::default(); self.size];
 
-        for i in 0..BOARD_SIZE {
+        for i in 0..self.size {
             top_left_to_bottom_right[i] = Coord::new(i, i);
-            top_right_to_bottom_left[i] = Coord::new(BOARD_SIZE - 1 - i, i);
+            top_right_to_bottom_left[i] = Coord::new(self.size - 1 - i, i);
         }
 
-        [top_left_to_bottom_right, top_right_to_bottom_left]
+        vec![top_left_to_bottom_right, top_right_to_bottom_left]
     }
 
     fn check_row(&self, y: usize, mark: Mark) -> Option<WinCoords> {
-        let mut row_coords = [Coord::default(); BOARD_SIZE];
+        let mut row_coords = vec![Coord::default(); self.size];
 
         #[allow(clippy::needless_range_loop)]
-        for x in 0..BOARD_SIZE {
+        for x in 0..self.size {
             let coord = Coord::new(x, y);
             if self.cell_at(coord).state != CellState::Marked(mark) {
                 return None;
@@ -119,10 +120,10 @@ impl Board {
     }
 
     fn check_column(&self, x: usize, mark: Mark) -> Option<WinCoords> {
-        let mut col_coords = [Coord::default(); BOARD_SIZE];
+        let mut col_coords = vec![Coord::default(); self.size];
 
         #[allow(clippy::needless_range_loop)]
-        for y in 0..BOARD_SIZE {
+        for y in 0..self.size {
             let coord = Coord::new(x, y);
             if self.cell_at(coord).state != CellState::Marked(mark) {
                 return None;
@@ -134,12 +135,12 @@ impl Board {
     }
 
     fn check_diagonals(&self, mark: Mark) -> Option<WinCoords> {
-        for coords in Board::generate_diagonal_coords().iter() {
+        for coords in self.generate_diagonal_coords() {
             if coords
                 .iter()
                 .all(|coord| self.cell_at(*coord).state == CellState::Marked(mark))
             {
-                return Some(*coords);
+                return Some(coords);
             }
         }
         None
@@ -161,8 +162,6 @@ enum Direction {
     Right,
 }
 
-const MAX_XY: usize = BOARD_SIZE - 1;
-
 #[derive(Default, Debug, Copy, Clone)]
 struct Coord {
     x: usize,
@@ -174,14 +173,28 @@ impl Coord {
         Coord { x, y }
     }
 
-    fn mv(&mut self, direction: Direction) {
+    fn mv(&mut self, direction: Direction, grid_size: usize) {
         use Direction::*;
+
+        let upper_bound = grid_size - 1;
 
         match direction {
             Up => self.y = if self.y == 0 { 0 } else { self.y - 1 },
-            Down => self.y = if self.y == MAX_XY { MAX_XY } else { self.y + 1 },
+            Down => {
+                self.y = if self.y == upper_bound {
+                    upper_bound
+                } else {
+                    self.y + 1
+                }
+            }
             Left => self.x = if self.x == 0 { 0 } else { self.x - 1 },
-            Right => self.x = if self.x == MAX_XY { MAX_XY } else { self.x + 1 },
+            Right => {
+                self.x = if self.x == upper_bound {
+                    upper_bound
+                } else {
+                    self.x + 1
+                }
+            }
         };
     }
 }
@@ -240,7 +253,7 @@ impl GameState {
                         write!(out, "{}", color::Bg(color::Reset))?;
                     }
 
-                    if x < BOARD_SIZE - 1 {
+                    if x < self.board.size - 1 {
                         write!(
                             out,
                             "{}  {}",
@@ -254,8 +267,9 @@ impl GameState {
             }
 
             // Write out bottom border for entire row
-            if y < BOARD_SIZE - 1 {
-                let border = " ".repeat((CELL_WIDTH * BOARD_SIZE) + ((BOARD_SIZE - 1) * 2));
+            if y < self.board.size - 1 {
+                let border =
+                    " ".repeat((CELL_WIDTH * self.board.size) + ((self.board.size - 1) * 2));
                 write!(
                     out,
                     "{}{}{}\r\n",
@@ -302,10 +316,10 @@ impl<I: io::Read, O: io::Write> Runnable<I, O> for GameState {
                 Event::Key(Key::Char('q')) => {
                     return Ok(Transition::Done);
                 }
-                Event::Key(Key::Up) => self.cursor.mv(Direction::Up),
-                Event::Key(Key::Down) => self.cursor.mv(Direction::Down),
-                Event::Key(Key::Left) => self.cursor.mv(Direction::Left),
-                Event::Key(Key::Right) => self.cursor.mv(Direction::Right),
+                Event::Key(Key::Up) => self.cursor.mv(Direction::Up, self.board.size),
+                Event::Key(Key::Down) => self.cursor.mv(Direction::Down, self.board.size),
+                Event::Key(Key::Left) => self.cursor.mv(Direction::Left, self.board.size),
+                Event::Key(Key::Right) => self.cursor.mv(Direction::Right, self.board.size),
                 Event::Key(Key::Char('\n')) => self.play(),
                 _ => {}
             }
