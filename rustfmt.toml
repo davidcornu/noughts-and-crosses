@@ -1,0 +1,4 @@
+# RLS VSCode is currently broken
+# https://github.com/rust-lang/rls-vscode/issues/576#issuecomment-486042023
+reorder_imports = false
+reorder_modules = false
