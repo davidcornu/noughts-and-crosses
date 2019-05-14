@@ -2,6 +2,8 @@
 // https://doc.rust-lang.org/std/macro.writeln.html
 #![allow(clippy::write_with_newline)]
 
+mod ascii_box;
+
 use std::io;
 use std::io::Write;
 use termion::{
@@ -9,8 +11,9 @@ use termion::{
     raw::IntoRawMode,
     screen::AlternateScreen,
     input::TermRead,
-    color,
+    color, style,
 };
+use ascii_box::AsciiBox;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Mark {
@@ -339,7 +342,7 @@ impl<I: io::Read, O: io::Write> Runnable<I, O> for GameState {
             }
         }
 
-        Ok(Transition::Next(Box::new(GameState::default())))
+        Ok(Transition::Next(Box::new(StartState::default())))
     }
 }
 
@@ -352,6 +355,33 @@ trait Runnable<I: io::Read, O: io::Write> {
     fn run(&mut self, input: &mut I, screen: &mut O) -> Result<Transition<I, O>, io::Error>;
 }
 
+#[derive(Default)]
+struct StartState {}
+
+impl<I: io::Read, O: io::Write> Runnable<I, O> for StartState {
+    fn run(&mut self, _input: &mut I, screen: &mut O) -> Result<Transition<I, O>, io::Error> {
+        write!(
+            screen,
+            "{}Noughts & Crosses{}\r\n\r\n",
+            style::Bold,
+            style::Reset
+        )?;
+
+        let mut controls = AsciiBox::default();
+        controls.add_line("\u{2191} Move cursor up");
+        controls.add_line("\u{2193}             down");
+        controls.add_line("\u{2190}             left");
+        controls.add_line("\u{2192}             right");
+        controls.add_line("\u{21B5} Play");
+        controls.add_line("q Quit");
+        controls.print(screen, "Controls")?;
+
+        std::thread::sleep(std::time::Duration::from_secs(5));
+
+        Ok(Transition::Next(Box::new(GameState::default())))
+    }
+}
+
 fn main() -> Result<(), io::Error> {
     let mut stdin = io::stdin();
     let mut screen = AlternateScreen::from(io::stdout().into_raw_mode()?);
@@ -360,7 +390,7 @@ fn main() -> Result<(), io::Error> {
 
     let mut current_state: Box<
         dyn Runnable<io::Stdin, AlternateScreen<termion::raw::RawTerminal<io::Stdout>>>,
-    > = Box::new(GameState::default());
+    > = Box::new(StartState::default());
 
     loop {
         write!(
